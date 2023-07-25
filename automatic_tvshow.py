@@ -5,7 +5,7 @@ episodes_to_keep = 1
 tvshows_directory = '/home/mafetri/media/tvshows'
 
 delete_episodes_paths = []
-new_episodes_ids = []
+next_monitored_episodes_ids = []
 
 # Downloaded Episodes
 episodes = (requests.get(
@@ -38,7 +38,7 @@ for serie in tvshows:
 	deleted = 0
 
 	# If there are more than one episode, deletes the played ones and keeps x number
-	if len(serie['Episodes']) > 1: 
+	if len(serie['Episodes']) > 1:
 		for i, episode in enumerate(serie['Episodes']):
 			# If the episode was not played, skips
 			if episode['UserData']['Played'] == False:
@@ -64,49 +64,54 @@ for serie in tvshows:
 		# Searchs the id of the tvshow
 		matching_id = next((serie_sonarr["id"] for serie_sonarr in all_tvshows if serie_sonarr["title"] == serie['SeriesName']), None)
 
-		# Gets the episodes of that season
-		monitored_episodes = (requests.get('http://192.168.1.10:8989/api/v3/episode?seriesId=' + str(matching_id) +'&seasonNumber=' + episode['SeasonName'].split(" ")[1] + '&includeImages=false&apikey=92029b4236dd4099b5a8679cad32ce48')).json()
-		
-		# If the last episode of the season is not being monitored
-		if monitored_episodes[len(monitored_episodes)-1]['monitored'] is False:
-			# Gets the next episode unmonitored id
-			for i in reversed(range(len(monitored_episodes))):
-				if monitored_episodes[i]['monitored'] == True:
-					next_episode = monitored_episodes[i + 1]['id']
-					break
-		else:
-			# If it needs the next season
-			monitored_episodes = (requests.get('http://192.168.1.10:8989/api/v3/episode?seriesId=' + str(matching_id) +'&seasonNumber=' + str(int(episode['SeasonName'].split(" ")[1]) + 1) + '&includeImages=false&apikey=92029b4236dd4099b5a8679cad32ce48')).json()
-			# If the next season exists
-			if len(monitored_episodes) > 0:
-				# Gets the next episode unmonitored id
-				for i in reversed(range(len(monitored_episodes))):
-					if monitored_episodes[i]['monitored'] == True:
-						next_episode = monitored_episodes[i + 1]['id']
+		season = int(episode['SeasonName'].split(" ")[1])
+		next_episodes = []
+
+		# While the next_episodes to monitor are not gratter or equal to the ammount deleted
+		while len(next_episodes) < deleted:
+			# Gets the episodes of the season
+			monitored_episodes = (requests.get('http://192.168.1.10:8989/api/v3/episode?seriesId=' + str(matching_id) +'&seasonNumber=' + str(season) + '&includeImages=false&apikey=92029b4236dd4099b5a8679cad32ce48')).json()
+			
+			if len(monitored_episodes) > 0: 
+				# Find the index of the last monitored episode of that season
+				last_monitored_index = len(monitored_episodes) - 1
+				while last_monitored_index >= 0 and not monitored_episodes[last_monitored_index]['monitored']:
+					last_monitored_index -= 1
+
+				# From the last episode monitored, saves the next 'deleted' number of episodes are not monitored in that season
+				for i in range(last_monitored_index + 1, len(monitored_episodes)):
+					if not monitored_episodes[i]['monitored']:
+						next_episodes.append(monitored_episodes[i]['id'])
+					if len(next_episodes) == deleted:
 						break
-					elif i == 0:
-						next_episode = monitored_episodes[0]['id']
+				
+				# Jumps to the next season
+				season += 1
 			else:
-				next_episode = -1
+				break
 
-		# If there is another episode to monitor
-		# if next_episode != -1:
-		# 	# Sets to monitor
-		# 	res = requests.put('http://192.168.1.10:8989/api/v3/episode/' + str(next_episode) + '?apikey=92029b4236dd4099b5a8679cad32ce48', json={
-		# 		'monitored': True
-		# 	})
+		# Adds the next_episodes of this season to the total
+		next_monitored_episodes_ids.extend(next_episodes)
 
-		# 	# Searchs the episode
-		# 	res = requests.post('http://192.168.1.10:8989/api/v3/command?apikey=92029b4236dd4099b5a8679cad32ce48', json={
-		# 		"name": "MissingEpisodeSearch", 
-		# 		"episodeId": next_episode
-		# 	})
+# Monitors and Searchs for the new added episodes
+for id in next_monitored_episodes_ids:
+	# Sets to monitor
+	res = requests.put('http://192.168.1.10:8989/api/v3/episode/' + str(id) + '?apikey=92029b4236dd4099b5a8679cad32ce48', json={
+		'monitored': True
+	})
 
-		# # Rescans the serie
-		# res = requests.post('http://192.168.1.10:8989/api/v3/command?apikey=92029b4236dd4099b5a8679cad32ce48', json={
-		# 		"name": "rescanSeries", 
-		# 		"seriesId": matching_id 
-		# 	})
-		
-for deleted_episode in delete_episodes_paths:
-	print(deleted_episode)
+	# Searchs the episode
+	res = requests.post('http://192.168.1.10:8989/api/v3/command?apikey=92029b4236dd4099b5a8679cad32ce48', json={
+		"name": "MissingEpisodeSearch", 
+		"episodeId": id
+	})
+
+# Deletes the files
+for path in delete_episodes_paths:
+	os.remove(tvshows_directory + path)
+
+# # Rescans the serie
+# res = requests.post('http://192.168.1.10:8989/api/v3/command?apikey=92029b4236dd4099b5a8679cad32ce48', json={
+# 		"name": "rescanSeries", 
+# 		"seriesId": matching_id 
+# 	})
