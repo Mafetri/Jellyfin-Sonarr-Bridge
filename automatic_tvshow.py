@@ -1,5 +1,6 @@
 import requests
 import os
+from datetime import datetime
 
 episodes_to_keep = 1
 tvshows_directory = '/home/mafetri/media/tvshows'
@@ -51,13 +52,13 @@ for serie in tvshows:
 			# Gets the file name and path
 			delete_episode_name = serie['SeriesName'] + " - S" + episode['SeasonName'].split(" ")[1].zfill(2) + 'E' + str(episode['IndexNumber']).zfill(2)
 			delete_episode_directory = '/' + serie['SeriesName'] + '/' + episode['SeasonName']
+			deleted += 1
 
 			# Adds to delete all the coincidence files (so it deletes the subtitles too)
 			files_in_directory = os.listdir(tvshows_directory + delete_episode_directory)
 			for file_name in files_in_directory:
 				if file_name.startswith(delete_episode_name):
 					delete_episodes_paths.append(delete_episode_directory + '/' + file_name)
-					deleted += 1
 
 	# Monitor next unmonitored episode
 	if deleted > 0:
@@ -93,25 +94,42 @@ for serie in tvshows:
 		# Adds the next_episodes of this season to the total
 		next_monitored_episodes_ids.extend(next_episodes)
 
-# Monitors and Searchs for the new added episodes
+# For logs
+print(datetime.now())
+
+# Monitors and Searches for the new added episodes
 for id in next_monitored_episodes_ids:
+	print('Episode ' + str(id) + ':')
 	# Sets to monitor
 	res = requests.put('http://192.168.1.10:8989/api/v3/episode/' + str(id) + '?apikey=92029b4236dd4099b5a8679cad32ce48', json={
 		'monitored': True
 	})
+	print('-> Montitor: ', end='')
+	if res.status_code == 200:
+		print('Ok!')
+	else:
+		print('Error!')
 
-	# Searchs the episode
+	# Searches the episode
 	res = requests.post('http://192.168.1.10:8989/api/v3/command?apikey=92029b4236dd4099b5a8679cad32ce48', json={
 		"name": "MissingEpisodeSearch", 
 		"episodeId": id
 	})
-
+	print('-> Search: ', end='')
+	if res.status_code == 201:
+		print('Ok!')
+	else:
+		print('Error!')
+	
 # Deletes the files
 for path in delete_episodes_paths:
+	print('Deleting: ' + path)
 	os.remove(tvshows_directory + path)
 
-# # Rescans the serie
-# res = requests.post('http://192.168.1.10:8989/api/v3/command?apikey=92029b4236dd4099b5a8679cad32ce48', json={
-# 		"name": "rescanSeries", 
-# 		"seriesId": matching_id 
-# 	})
+# Refresh all series
+res = requests.post('http://192.168.1.10:8989/api/v3/command?apikey=92029b4236dd4099b5a8679cad32ce48', json={
+	"name": "RefreshSeries", 
+})
+
+# To separate logs
+print('--------------------')
