@@ -84,7 +84,7 @@ for serie in tvshows:
 
 		# If the season of the last episode watched was monitored and there are only
 		# EPISODES_TO_NEXT_SEASON episodes unseen, it monitors the next season
-		if serie_sonarr['seasons'][season]['monitored'] and serie_sonarr['seasons'][season]['statistics']['episodeCount'] - deleted < EPISODES_TO_NEXT_SEASON:
+		if (len(serie_sonarr['seasons']) > season + 1) and (serie_sonarr['seasons'][season]['monitored']) and (serie_sonarr['seasons'][season]['statistics']['episodeCount'] - deleted < EPISODES_TO_NEXT_SEASON):
 			serie_sonarr['seasons'][season+1]['monitored'] = True
 			next_monitored_season_jsons.append(serie_sonarr)
 		else:
